@@ -15,6 +15,7 @@ import joblib
 import json
 import os
 from pathlib import Path
+from datetime import datetime
 
 # ─────────────────────────────────────────────────────────────
 # PAGE CONFIG
@@ -202,6 +203,33 @@ MODELS_DIR  = BASE_DIR / "saved_models"
 DATASET_DIR = BASE_DIR / "dataset"
 
 
+def init_session_state():
+    """Create local-session stores for profile, reports, and prediction history."""
+    defaults = {
+        "patient_profile": {
+            "name": "",
+            "age": 35,
+            "gender": "Not specified",
+            "phone": "",
+            "blood_group": "Unknown",
+            "medical_history": "",
+            "allergies": "",
+            "medications": "",
+            "previous_reports": "",
+            "emergency_contact": "",
+        },
+        "risk_history": [],
+        "uploaded_reports": [],
+        "uploaded_report_keys": [],
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+init_session_state()
+
+
 # ─────────────────────────────────────────────────────────────
 # MODEL LOADER  (cached for performance)
 # ─────────────────────────────────────────────────────────────
@@ -221,6 +249,107 @@ def run_prediction(disease: str, features: list):
     pred  = model.predict(arr_s)[0]
     proba = model.predict_proba(arr_s)[0]
     return int(pred), float(proba[1]), metrics
+
+
+def add_risk_history(disease: str, pred: int, prob: float, vitals: dict):
+    risk_percent = prob * 100 if pred == 1 else (1 - prob) * 100
+    st.session_state.risk_history.append({
+        "Time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "Disease": disease,
+        "Result": "High Risk" if pred == 1 else "Low Risk",
+        "Risk Score": round(risk_percent, 1),
+        **vitals,
+    })
+
+
+def render_referral_panel(disease: str, pred: int):
+    specialists = {
+        "Diabetes": ("Endocrinologist", "HbA1c, fasting glucose, kidney profile"),
+        "Heart Disease": ("Cardiologist", "ECG, lipid profile, BP monitoring"),
+        "Parkinson's": ("Neurologist", "Neurological exam, voice/motor assessment"),
+    }
+    specialist, next_tests = specialists[disease]
+    urgency = "Priority consultation recommended" if pred == 1 else "Routine follow-up can be planned"
+
+    st.markdown('<div class="section-header">Doctor Consultation / Referral</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.info(f"Specialist: {specialist}")
+    with c2:
+        st.info(urgency)
+    with c3:
+        st.info(f"Suggested tests: {next_tests}")
+
+    with st.expander("Create consultation note"):
+        city = st.text_input("City / Location", value="", key=f"{disease}_city")
+        symptoms = st.text_area("Current symptoms", key=f"{disease}_symptoms")
+        st.text_area(
+            "Referral note",
+            value=(
+                f"Patient should consult a {specialist}. "
+                f"MediScan AI result: {urgency}. "
+                f"Location: {city or 'Not provided'}. "
+                f"Symptoms: {symptoms or 'Not provided'}."
+            ),
+            height=110,
+            key=f"{disease}_referral_note",
+        )
+
+
+def render_emergency_guidance(disease: str, pred: int):
+    if pred != 1:
+        return
+
+    guidance = {
+        "Diabetes": [
+            "Seek urgent help for confusion, fainting, severe weakness, vomiting, or very high glucose symptoms.",
+            "Avoid self-adjusting insulin/medicine without a clinician.",
+            "Keep water available and contact your doctor if symptoms are worsening.",
+        ],
+        "Heart Disease": [
+            "Call emergency services immediately for chest pain, breathlessness, sweating, or pain radiating to arm/jaw.",
+            "Do not drive yourself to the hospital during active chest pain.",
+            "Keep previous ECG/report details ready for the doctor.",
+        ],
+        "Parkinson's": [
+            "Seek urgent care for sudden severe weakness, falls, trouble swallowing, confusion, or breathing difficulty.",
+            "Book a neurologist visit for a complete motor and neurological assessment.",
+            "Keep a symptom diary including tremor, stiffness, sleep, voice, and medication timing.",
+        ],
+    }
+
+    st.error("Emergency Alert & Guidance: High-risk indicators detected. This is not a diagnosis, but medical follow-up is recommended.")
+    for item in guidance[disease]:
+        st.warning(item)
+    st.info("Emergency contact: 112 / local emergency number. Share this result with a qualified healthcare professional.")
+
+
+def analyze_uploaded_report(uploaded_file):
+    name = uploaded_file.name
+    suffix = Path(name).suffix.lower()
+    size_kb = len(uploaded_file.getvalue()) / 1024
+    summary = [f"File received: {name} ({size_kb:.1f} KB)"]
+
+    if suffix == ".csv":
+        try:
+            df = pd.read_csv(uploaded_file)
+            numeric_cols = df.select_dtypes(include="number").columns.tolist()
+            summary.append(f"Rows: {len(df)}, Columns: {len(df.columns)}")
+            if numeric_cols:
+                stats = df[numeric_cols].describe().T[["mean", "min", "max"]].round(2)
+                return summary, stats
+        except Exception as exc:
+            summary.append(f"CSV analysis failed: {exc}")
+    elif suffix in [".txt", ".md"]:
+        text = uploaded_file.getvalue().decode("utf-8", errors="ignore")
+        keywords = ["high", "low", "positive", "abnormal", "critical", "elevated", "reduced"]
+        matches = [word for word in keywords if word in text.lower()]
+        summary.append(f"Text length: {len(text)} characters")
+        summary.append("Possible attention keywords: " + (", ".join(matches) if matches else "none found"))
+    else:
+        summary.append("Preview stored for reference. Automated text extraction for PDF/image/audio needs OCR or transcription integration.")
+
+    return summary, None
 
 
 def show_result(pred: int, prob: float, positive_label: str, negative_label: str,
@@ -277,9 +406,12 @@ with st.sidebar:
         "Navigate",
         [
             "🏠  Home",
+            "Patient Profile",
+            "Report Upload & Analysis",
             "🩺  Diabetes Prediction",
             "❤️  Heart Disease",
             "🧠  Parkinson's Disease",
+            "Risk History",
             "📊  Model Analytics",
             "ℹ️   About"
         ],
@@ -376,6 +508,106 @@ if page == "🏠  Home":
 
 
 # ══════════════════════════════════════════════════════════════
+# PAGE — PATIENT PROFILE
+# ══════════════════════════════════════════════════════════════
+elif page == "Patient Profile":
+    st.markdown('<h1 class="main-title">Patient Profile Management</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Manage patient details for this local session</p>', unsafe_allow_html=True)
+
+    profile = st.session_state.patient_profile
+    with st.form("patient_profile_form"):
+        st.markdown('<div class="section-header">Basic Details</div>', unsafe_allow_html=True)
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            name = st.text_input("Patient Name", value=profile["name"])
+        with c2:
+            age = st.number_input("Age", 0, 120, int(profile["age"]))
+        with c3:
+            gender = st.selectbox(
+                "Gender",
+                ["Not specified", "Female", "Male", "Other"],
+                index=["Not specified", "Female", "Male", "Other"].index(profile["gender"])
+                if profile["gender"] in ["Not specified", "Female", "Male", "Other"] else 0,
+            )
+        with c4:
+            blood_group = st.selectbox(
+                "Blood Group",
+                ["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+                index=["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].index(profile["blood_group"])
+                if profile["blood_group"] in ["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] else 0,
+            )
+
+        st.markdown('<div class="section-header">Medical Details</div>', unsafe_allow_html=True)
+        m1, m2 = st.columns(2)
+        with m1:
+            phone = st.text_input("Phone", value=profile["phone"])
+            allergies = st.text_area("Allergies", value=profile["allergies"], height=90)
+            medical_history = st.text_area("Medical History", value=profile["medical_history"], height=120)
+        with m2:
+            emergency_contact = st.text_input("Emergency Contact", value=profile["emergency_contact"])
+            medications = st.text_area("Current Medications", value=profile["medications"], height=90)
+            previous_reports = st.text_area("Previous Reports / Notes", value=profile["previous_reports"], height=120)
+
+        saved = st.form_submit_button("Save Patient Profile", use_container_width=True)
+
+    if saved:
+        st.session_state.patient_profile = {
+            "name": name,
+            "age": age,
+            "gender": gender,
+            "phone": phone,
+            "blood_group": blood_group,
+            "medical_history": medical_history,
+            "allergies": allergies,
+            "medications": medications,
+            "previous_reports": previous_reports,
+            "emergency_contact": emergency_contact,
+        }
+        st.success("Patient profile saved for this session.")
+
+    st.markdown('<div class="section-header">Current Profile Summary</div>', unsafe_allow_html=True)
+    st.dataframe(pd.DataFrame([st.session_state.patient_profile]), hide_index=True, use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════
+# PAGE — REPORT UPLOAD
+# ══════════════════════════════════════════════════════════════
+elif page == "Report Upload & Analysis":
+    st.markdown('<h1 class="main-title">Report Upload & Analysis</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Upload reports and store quick analysis notes in this session</p>', unsafe_allow_html=True)
+
+    uploaded_files = st.file_uploader(
+        "Upload blood test, ECG, MRI, prescription, voice note, CSV, TXT, PDF, or image",
+        type=["csv", "txt", "md", "pdf", "png", "jpg", "jpeg", "wav", "mp3"],
+        accept_multiple_files=True,
+    )
+
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            report_key = f"{uploaded_file.name}:{uploaded_file.size}"
+            summary, stats = analyze_uploaded_report(uploaded_file)
+            if report_key not in st.session_state.uploaded_report_keys:
+                st.session_state.uploaded_reports.append({
+                    "Time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "File": uploaded_file.name,
+                    "Summary": " | ".join(summary),
+                })
+                st.session_state.uploaded_report_keys.append(report_key)
+            with st.expander(uploaded_file.name, expanded=True):
+                for line in summary:
+                    st.write(line)
+                if stats is not None:
+                    st.dataframe(stats, use_container_width=True)
+                st.info("Clinical interpretation should be done by a qualified doctor. This summary is only a helper.")
+
+    st.markdown('<div class="section-header">Uploaded Report History</div>', unsafe_allow_html=True)
+    if st.session_state.uploaded_reports:
+        st.dataframe(pd.DataFrame(st.session_state.uploaded_reports), hide_index=True, use_container_width=True)
+    else:
+        st.info("No reports uploaded in this session yet.")
+
+
+# ══════════════════════════════════════════════════════════════
 # PAGE — DIABETES
 # ══════════════════════════════════════════════════════════════
 elif page == "🩺  Diabetes Prediction":
@@ -404,6 +636,11 @@ elif page == "🩺  Diabetes Prediction":
     if submitted:
         features = [pregnancies, glucose, blood_pressure, skin_thickness, insulin, bmi, dpf, age]
         pred, prob, _ = run_prediction("diabetes", features)
+        add_risk_history("Diabetes", pred, prob, {
+            "BMI": bmi,
+            "Glucose": glucose,
+            "Blood Pressure": blood_pressure,
+        })
         col_r, col_s = st.columns([2, 1])
         with col_r:
             show_result(pred, prob,
@@ -420,6 +657,8 @@ elif page == "🩺  Diabetes Prediction":
 
         st.markdown('<div class="disclaimer">⚠️ Consult an endocrinologist or physician for proper diagnosis.</div>',
                     unsafe_allow_html=True)
+        render_referral_panel("Diabetes", pred)
+        render_emergency_guidance("Diabetes", pred)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -466,6 +705,11 @@ elif page == "❤️  Heart Disease":
     if submitted:
         features = [age, sex[1], cp[0], trestbps, chol, fbs[0], restecg[0], thalach, exang[0], oldpeak, slope[0], ca, thal[0]]
         pred, prob, _ = run_prediction("heart", features)
+        add_risk_history("Heart Disease", pred, prob, {
+            "Cholesterol": chol,
+            "Blood Pressure": trestbps,
+            "Max Heart Rate": thalach,
+        })
         show_result(pred, prob,
                     "Heart Disease Risk Detected", "No Heart Disease Detected",
                     "❗", "💚",
@@ -473,6 +717,8 @@ elif page == "❤️  Heart Disease":
                     "The model indicates healthy cardiovascular indicators.")
         st.markdown('<div class="disclaimer">⚠️ Consult a cardiologist if you experience chest pain or shortness of breath.</div>',
                     unsafe_allow_html=True)
+        render_referral_panel("Heart Disease", pred)
+        render_emergency_guidance("Heart Disease", pred)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -518,6 +764,11 @@ elif page == "🧠  Parkinson's Disease":
     if submitted:
         features = [fo, fhi, flo, jitter, shimmer, nhr, hnr, rpde, dfa, spread1, spread2, d2, ppe]
         pred, prob, _ = run_prediction("parkinsons", features)
+        add_risk_history("Parkinson's", pred, prob, {
+            "Jitter": jitter,
+            "Shimmer": shimmer,
+            "HNR": hnr,
+        })
         show_result(pred, prob,
                     "Parkinson's Indicators Detected", "No Parkinson's Indicators",
                     "⚠️", "✅",
@@ -525,6 +776,52 @@ elif page == "🧠  Parkinson's Disease":
                     "Voice biomarkers appear within normal ranges.")
         st.markdown('<div class="disclaimer">⚠️ Voice analysis is supplementary. Consult a neurologist for comprehensive evaluation.</div>',
                     unsafe_allow_html=True)
+        render_referral_panel("Parkinson's", pred)
+        render_emergency_guidance("Parkinson's", pred)
+
+
+# ══════════════════════════════════════════════════════════════
+# PAGE — RISK HISTORY
+# ══════════════════════════════════════════════════════════════
+elif page == "Risk History":
+    st.markdown('<h1 class="main-title">Risk History & Progress Tracking</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Track prediction results and key health markers from this session</p>', unsafe_allow_html=True)
+
+    if not st.session_state.risk_history:
+        st.info("No prediction history yet. Run a disease prediction to start tracking progress.")
+    else:
+        history_df = pd.DataFrame(st.session_state.risk_history)
+        st.markdown('<div class="section-header">Prediction Timeline</div>', unsafe_allow_html=True)
+        st.dataframe(history_df, hide_index=True, use_container_width=True)
+
+        chart_df = history_df.copy()
+        chart_df["Time"] = pd.to_datetime(chart_df["Time"])
+        st.markdown('<div class="section-header">Risk Score Trend</div>', unsafe_allow_html=True)
+        st.line_chart(chart_df, x="Time", y="Risk Score", color="Disease")
+
+        numeric_cols = [
+            col for col in ["BMI", "Glucose", "Blood Pressure", "Cholesterol", "Max Heart Rate", "Jitter", "Shimmer", "HNR"]
+            if col in chart_df.columns and pd.api.types.is_numeric_dtype(chart_df[col])
+        ]
+        if numeric_cols:
+            selected_marker = st.selectbox("Health marker trend", numeric_cols)
+            st.line_chart(chart_df.dropna(subset=[selected_marker]), x="Time", y=selected_marker, color="Disease")
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("Total Checks", len(history_df))
+        with c2:
+            st.metric("High Risk Results", int((history_df["Result"] == "High Risk").sum()))
+        with c3:
+            st.metric("Latest Risk Score", f'{history_df.iloc[-1]["Risk Score"]:.1f}%')
+
+        st.download_button(
+            "Download History CSV",
+            history_df.to_csv(index=False).encode("utf-8"),
+            "mediscan_risk_history.csv",
+            "text/csv",
+            use_container_width=True,
+        )
 
 
 # ══════════════════════════════════════════════════════════════
