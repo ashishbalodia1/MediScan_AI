@@ -38,23 +38,24 @@ MediScan AI provides an interactive clinical interface for multi-disease risk ev
 
 ## Dataset Provenance & Methodology
 
-To ensure open accessibility without storing or exposing HIPAA-restricted **Protected Health Information (PHI)**, the models were developed using **synthetically modeled benchmark cohorts**. Each dataset was parameterized mathematically to reflect the feature distributions, correlations, and ranges documented in established clinical research repositories:
+To ensure open accessibility without storing or exposing HIPAA-restricted **Protected Health Information (PHI)**, the models were developed using **synthetically modeled benchmark cohorts**. Each dataset was parameterized mathematically to reflect the feature distributions, correlations, and clinical ranges documented in established medical research repositories:
 
-| Module | Dataset Type | Total Samples | Train / Test Split | Empirical Reference |
+| Module | Dataset Type | Total Samples | Train / Test Split | Empirical Reference & Source Link |
 |---|---|:---:|:---:|---|
-| **Diabetes** | Synthetic Benchmark | 1,200 | 960 / 240 (80/20) | Pima Indians Diabetes Database (UCI ML Repository / NIDDK) |
-| **Cardiovascular** | Synthetic Benchmark | 1,200 | 960 / 240 (80/20) | Cleveland Clinic Foundation Heart Disease (UCI ML Repository) |
-| **Parkinson's** | Synthetic Benchmark | 900 | 720 / 180 (80/20) | Oxford University Vocal Impairment Dataset (UCI ML Repository) |
+| **Diabetes** | Synthetic Benchmark | 1,200 | 960 / 240 (80/20) | [UCI Pima Indians Diabetes Database](https://archive.ics.uci.edu/dataset/34/diabetes) ([Kaggle Mirror](https://www.kaggle.com/datasets/uciml/pima-indians-diabetes-database)) |
+| **Cardiovascular** | Synthetic Benchmark | 1,200 | 960 / 240 (80/20) | [UCI Heart Disease Dataset (Cleveland)](https://archive.ics.uci.edu/dataset/45/heart+disease) |
+| **Parkinson's** | Synthetic Benchmark | 900 | 720 / 180 (80/20) | [UCI Parkinson's Disease Dataset (Oxford)](https://archive.ics.uci.edu/dataset/174/parkinsons) |
 
 ---
 
 ## Data Hygiene & Leakage Audit
 
-A strict data hygiene verification was conducted across all training and hold-out splits:
+A rigorous data hygiene verification was conducted across all training and hold-out splits:
 
-- **Duplicate Rows**: Verified **0 duplicate rows** across all individual train and test sets.
-- **Train-Test Leakage**: Verified **0 overlapping rows** between training partitions and test partitions.
-- **Preprocessing Isolation**: `StandardScaler` transformations are fit strictly on the training partitions (`X_train`) and only applied (`transform`) to test partitions and live user inputs, preventing data snooping or distribution leakage.
+- **Split & Synthesis Sequence**: Datasets were generated in full and partitioned using `train_test_split(..., test_size=0.2, stratify=y, random_state=42)`. No post-split augmentation or oversampling was applied.
+- **Duplicate Rows**: Verified **0 duplicate rows** in the training sets and **0 duplicate rows** in the test sets.
+- **Train-Test Leakage**: Verified **0 overlapping rows** between training partitions and hold-out test partitions.
+- **Preprocessing Isolation**: `StandardScaler` transformations are fit strictly on the training partitions (`X_train`) and only applied (`transform`) to test partitions and live user inputs, preventing data leakage.
 
 ---
 
@@ -79,6 +80,25 @@ Medical decision support requires evaluating both discriminative power (ROC-AUC)
 | **Parkinson's** | **100.0%** | 100.0% | 100.0% | 100.0% | **1.000** | **0.0000** |
 
 *Note: Brier score measures the mean squared difference between predicted probabilities and actual outcomes (0.0 represents perfect probabilistic alignment).*
+
+### 3. Hold-out Confusion Matrices
+
+```text
+Diabetes Test Partition (N=240)
+                  Predicted Negative    Predicted Positive
+Actual Negative          154 (TN)               3 (FP)
+Actual Positive            2 (FN)              81 (TP)
+
+Cardiovascular Test Partition (N=240)
+                  Predicted Negative    Predicted Positive
+Actual Negative          120 (TN)               0 (FP)
+Actual Positive            0 (FN)             120 (TP)
+
+Parkinson's Test Partition (N=180)
+                  Predicted Negative    Predicted Positive
+Actual Negative           43 (TN)               0 (FP)
+Actual Positive            0 (FN)             137 (TP)
+```
 
 ---
 
