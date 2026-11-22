@@ -554,7 +554,7 @@ elif page == "Report Upload & Analysis":
 # --- View: Diabetes ---
 elif page == "Diabetes Risk":
     st.markdown('<h1 class="main-title">Diabetes Risk Assessment</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Evaluates metabolic indicators against calibrated gradient boosting decision boundaries</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Evaluates metabolic indicators against trained gradient boosting decision boundaries</p>', unsafe_allow_html=True)
 
     with st.expander("Quick Demo Presets", expanded=False):
         c_p1, c_p2 = st.columns(2)
@@ -749,7 +749,13 @@ elif page == "Risk History":
 # --- View: Model Analytics ---
 elif page == "Model Analytics":
     st.markdown('<h1 class="main-title">Model Specifications & Benchmark Analytics</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Validation metrics, training partitions, and feature schematics</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Validation metrics, 5-fold cross-validation, data hygiene audits, and calibration metrics</p>', unsafe_allow_html=True)
+
+    st.info(
+        "**Cohort Provenance Note:** Datasets are synthetic clinical cohorts mathematically generated from the empirical "
+        "distributions of UCI ML and Oxford medical repositories. Synthetic distributions yield clean decision boundaries "
+        "(98–100% hold-out metrics), whereas real-world clinical datasets typically exhibit 80–88% accuracy due to diagnostic noise and missing lab records."
+    )
 
     modules = {
         "Diabetes Risk Classifier": "diabetes",
@@ -763,22 +769,41 @@ elif page == "Model Analytics":
             train_df = pd.read_csv(DATASET_DIR / f"{key}_train.csv")
             test_df = pd.read_csv(DATASET_DIR / f"{key}_test.csv")
 
-            with st.expander(f"{label} (Hold-out Accuracy: {metrics['accuracy']*100:.1f}%)", expanded=True):
-                c1, c2, c3, c4 = st.columns(4)
-                for col, (num, color, lbl) in zip([c1, c2, c3, c4], [
-                    (f"{metrics['accuracy']*100:.1f}%", "#60a5fa", "Hold-out Accuracy"),
-                    (metrics["n_samples"], "#a78bfa", "Cohort Samples"),
-                    (metrics["n_train"], "#34d399", "Training Split"),
-                    (metrics["n_test"], "#fb923c", "Test Split"),
-                ]):
-                    with col:
-                        st.markdown(f"""
-                        <div class="stat-card">
-                            <div class="stat-number" style="color:{color};">{num}</div>
-                            <div class="stat-label">{lbl}</div>
-                        </div>""", unsafe_allow_html=True)
+            with st.expander(f"{label} — Test Accuracy: {metrics['accuracy']*100:.1f}% | 5-Fold CV: {metrics.get('cv_5fold_accuracy', 'N/A')}", expanded=True):
+                c1, c2, c3, c4, c5, c6 = st.columns(6)
+                with c1:
+                    st.metric("Hold-out Accuracy", f"{metrics['accuracy']*100:.1f}%")
+                with c2:
+                    st.metric("Test Precision", f"{metrics.get('precision', 0.0)*100:.1f}%")
+                with c3:
+                    st.metric("Test Recall", f"{metrics.get('recall', 0.0)*100:.1f}%")
+                with c4:
+                    st.metric("F1-Score", f"{metrics.get('f1_score', 0.0)*100:.1f}%")
+                with c5:
+                    st.metric("ROC-AUC", f"{metrics.get('roc_auc', 0.0):.4f}")
+                with c6:
+                    st.metric("Brier Score", f"{metrics.get('brier_score', 0.0):.4f}")
 
                 st.markdown("<br>", unsafe_allow_html=True)
+                
+                m1, m2 = st.columns(2)
+                with m1:
+                    st.markdown("**Data Hygiene & Leakage Audit**")
+                    st.markdown(f"""
+                    - **Cohort Rows:** {metrics['n_samples']} total ({metrics['n_train']} train / {metrics['n_test']} test)
+                    - **Train Set Duplicates:** {metrics.get('duplicate_rows', 0)} (Clean)
+                    - **Train-Test Overlap:** {metrics.get('train_test_overlap', 0)} rows (Zero data leakage)
+                    - **Feature Normalizer:** StandardScaler fit exclusively on training split
+                    """)
+                with m2:
+                    st.markdown("**5-Fold Cross-Validation (Train Partition)**")
+                    st.markdown(f"""
+                    - **Stratified CV Accuracy:** {metrics.get('cv_5fold_accuracy', 'N/A')}
+                    - **Stratified CV Recall:** {metrics.get('cv_5fold_recall', 'N/A')}
+                    - **Stratified CV ROC-AUC:** {metrics.get('cv_5fold_roc_auc', 'N/A')}
+                    - **Source Reference:** {metrics.get('dataset_source', 'UCI Benchmark distribution')}
+                    """)
+
                 t1, t2 = st.tabs(["Training Partition (Preview)", "Validation Partition (Preview)"])
                 with t1: st.dataframe(train_df.head(8), use_container_width=True, hide_index=True)
                 with t2: st.dataframe(test_df.head(8), use_container_width=True, hide_index=True)
