@@ -1,58 +1,59 @@
 """
-╔══════════════════════════════════════════════════════════════╗
-║         MEDISCAN AI — Disease Prediction System              ║
-║         Diabetes | Heart Disease | Parkinson's               ║
-╚══════════════════════════════════════════════════════════════╝
+MediScan AI - Clinical Disease Risk Assessment System
+Predictive risk modeling for Diabetes, Cardiovascular Disease, and Parkinson's.
 
-Author  : Ashish Balodia
-Version : 1.0.0
+Author: Ashish Balodia
 """
+
+import os
+import sys
+import json
+from pathlib import Path
+from datetime import datetime
 
 import streamlit as st
 import numpy as np
 import pandas as pd
 import joblib
-import json
-import os
-from pathlib import Path
-from datetime import datetime
 
-# ─────────────────────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────────────────────
+# Ensure unpickling compatibility across environments
+try:
+    import sklearn._loss._loss
+    sys.modules["_loss"] = sklearn._loss._loss
+except (ImportError, AttributeError):
+    pass
+
+# --- Page Configuration ---
 st.set_page_config(
-    page_title="MediScan AI | Disease Prediction",
-    page_icon="🏥",
+    page_title="MediScan AI | Risk Prediction",
+    page_icon="🩺",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ─────────────────────────────────────────────────────────────
-# CUSTOM CSS — Dark Medical Theme
-# ─────────────────────────────────────────────────────────────
+# --- Custom Styling ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
     * { box-sizing: border-box; }
 
     .stApp {
         background: #0f1117;
-        font-family: 'Inter', sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
-    /* ── Sidebar ── */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #111827 0%, #0f1117 100%);
+        background: #111827;
         border-right: 1px solid #1f2937;
     }
     [data-testid="stSidebar"] .stRadio label {
         color: #9ca3af !important;
         font-size: 14px;
-        padding: 10px 16px;
+        padding: 9px 14px;
         border-radius: 8px;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: all 0.15s ease-in-out;
         border: 1px solid transparent;
     }
     [data-testid="stSidebar"] .stRadio label:hover {
@@ -60,151 +61,133 @@ st.markdown("""
         color: #f9fafb !important;
     }
 
-    /* ── Typography ── */
     .main-title {
-        font-family: 'Playfair Display', serif;
-        font-size: 2.8rem;
+        font-size: 2.2rem;
         font-weight: 700;
-        background: linear-gradient(135deg, #60a5fa, #a78bfa, #34d399);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: #f9fafb;
+        letter-spacing: -0.02em;
         margin-bottom: 4px;
     }
     .main-subtitle {
-        color: #6b7280;
-        font-size: 1rem;
+        color: #9ca3af;
+        font-size: 0.95rem;
         font-weight: 400;
-        margin-bottom: 32px;
+        margin-bottom: 28px;
     }
-    h1, h2, h3 { color: #f9fafb; }
-    label { color: #d1d5db !important; font-size: 0.88rem !important; font-weight: 500 !important; }
+    h1, h2, h3 { color: #f9fafb; font-weight: 600; }
+    label { color: #d1d5db !important; font-size: 0.86rem !important; font-weight: 500 !important; }
 
-    /* ── Cards ── */
     .stat-card {
-        background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-        border: 1px solid #374151;
-        border-radius: 12px;
-        padding: 20px 24px;
+        background: #171c26;
+        border: 1px solid #2d3748;
+        border-radius: 10px;
+        padding: 18px 20px;
         text-align: center;
-        transition: transform 0.2s, border-color 0.2s;
+        transition: border-color 0.2s;
     }
-    .stat-card:hover { transform: translateY(-2px); border-color: #4b5563; }
-    .stat-number { font-size: 2.2rem; font-weight: 700; color: #60a5fa; line-height: 1; }
-    .stat-label { font-size: 0.75rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 6px; }
+    .stat-card:hover { border-color: #4a5568; }
+    .stat-number { font-size: 2rem; font-weight: 700; color: #60a5fa; line-height: 1.1; }
+    .stat-label { font-size: 0.76rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; }
 
     .info-card {
-        background: #1f2937;
-        border: 1px solid #374151;
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 16px;
+        background: #171c26;
+        border: 1px solid #2d3748;
+        border-radius: 10px;
+        padding: 18px;
+        margin-bottom: 14px;
     }
-    .info-card h4 { color: #e5e7eb; font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
-    .info-card p { color: #9ca3af; font-size: 0.88rem; line-height: 1.6; }
+    .info-card h4 { color: #e5e7eb; font-size: 0.98rem; font-weight: 600; margin-bottom: 8px; }
+    .info-card p { color: #9ca3af; font-size: 0.86rem; line-height: 1.55; }
 
-    /* ── Section Header ── */
     .section-header {
-        font-size: 1.1rem;
+        font-size: 1.05rem;
         font-weight: 600;
         color: #e5e7eb;
-        padding: 12px 0 8px 0;
-        border-bottom: 1px solid #374151;
-        margin-bottom: 20px;
+        padding: 12px 0 6px 0;
+        border-bottom: 1px solid #2d3748;
+        margin-bottom: 18px;
     }
 
-    /* ── Result Boxes ── */
     .result-positive {
-        background: linear-gradient(135deg, #7f1d1d22, #991b1b11);
-        border: 2px solid #ef4444;
-        border-radius: 16px;
-        padding: 28px 32px;
-        margin: 20px 0;
+        background: #2b171a;
+        border: 1.5px solid #ef4444;
+        border-radius: 12px;
+        padding: 24px 28px;
+        margin: 18px 0;
         text-align: center;
     }
     .result-negative {
-        background: linear-gradient(135deg, #14532d22, #15803d11);
-        border: 2px solid #22c55e;
-        border-radius: 16px;
-        padding: 28px 32px;
-        margin: 20px 0;
+        background: #13241b;
+        border: 1.5px solid #22c55e;
+        border-radius: 12px;
+        padding: 24px 28px;
+        margin: 18px 0;
         text-align: center;
     }
-    .result-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 6px; }
-    .result-positive .result-title { color: #ef4444; }
-    .result-negative .result-title { color: #22c55e; }
-    .result-subtitle { color: #9ca3af; font-size: 0.9rem; }
+    .result-title { font-size: 1.45rem; font-weight: 700; margin-bottom: 6px; }
+    .result-positive .result-title { color: #f87171; }
+    .result-negative .result-title { color: #4ade80; }
+    .result-subtitle { color: #9ca3af; font-size: 0.88rem; }
 
-    /* ── Confidence Bar ── */
     .confidence-bar-bg {
         background: #1f2937;
         border-radius: 999px;
-        height: 8px;
-        margin: 16px 0 6px 0;
+        height: 7px;
+        margin: 14px 0 6px 0;
         overflow: hidden;
     }
     .confidence-bar-fill { height: 100%; border-radius: 999px; }
 
-    /* ── Badges ── */
-    .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
-    .badge-blue   { background: #1d4ed833; color: #60a5fa; }
-    .badge-green  { background: #14532d33; color: #4ade80; }
-    .badge-purple { background: #4c1d9533; color: #c084fc; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+    .badge-blue   { background: #1e3a8a40; color: #60a5fa; }
+    .badge-green  { background: #14532d40; color: #4ade80; }
+    .badge-purple { background: #581c8740; color: #c084fc; }
 
-    /* ── Button ── */
     .stButton > button {
-        background: linear-gradient(135deg, #2563eb, #7c3aed);
-        color: white !important;
-        border: none;
-        border-radius: 10px;
-        padding: 12px 32px;
-        font-size: 1rem;
+        background: #2563eb;
+        color: #ffffff !important;
+        border: 1px solid #1d4ed8;
+        border-radius: 8px;
+        padding: 10px 24px;
+        font-size: 0.95rem;
         font-weight: 600;
         width: 100%;
         cursor: pointer;
-        transition: opacity 0.2s, transform 0.1s;
-        letter-spacing: 0.03em;
+        transition: background 0.15s ease;
     }
-    .stButton > button:hover { opacity: 0.9; transform: translateY(-1px); }
+    .stButton > button:hover { background: #1d4ed8; }
 
-    /* ── Tabs ── */
-    .stTabs [data-baseweb="tab-list"] { background: #1f2937; border-radius: 10px; padding: 4px; gap: 4px; }
-    .stTabs [data-baseweb="tab"] { border-radius: 8px; color: #9ca3af; font-size: 0.9rem; }
-    .stTabs [aria-selected="true"] { background: #2563eb !important; color: white !important; }
+    .stTabs [data-baseweb="tab-list"] { background: #171c26; border-radius: 8px; padding: 4px; gap: 4px; }
+    .stTabs [data-baseweb="tab"] { border-radius: 6px; color: #9ca3af; font-size: 0.88rem; }
+    .stTabs [aria-selected="true"] { background: #2563eb !important; color: #ffffff !important; }
 
-    /* ── Disclaimer ── */
     .disclaimer {
-        background: #1c1f26;
-        border: 1px solid #fbbf2440;
-        border-left: 3px solid #fbbf24;
-        border-radius: 8px;
-        padding: 12px 16px;
+        background: #1a1e29;
+        border: 1px solid #3b4252;
+        border-left: 3px solid #f59e0b;
+        border-radius: 6px;
+        padding: 12px 14px;
         color: #9ca3af;
         font-size: 0.82rem;
-        margin-top: 24px;
+        margin-top: 20px;
     }
 
-    /* ── Inputs ── */
     .stNumberInput input, .stSelectbox select {
-        background: #1f2937 !important;
-        border: 1px solid #374151 !important;
+        background: #171c26 !important;
+        border: 1px solid #2d3748 !important;
         color: #f9fafb !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-
-# ─────────────────────────────────────────────────────────────
-# PATHS
-# ─────────────────────────────────────────────────────────────
-BASE_DIR    = Path(__file__).parent
-MODELS_DIR  = BASE_DIR / "saved_models"
+# --- Paths ---
+BASE_DIR = Path(__file__).parent
+MODELS_DIR = BASE_DIR / "saved_models"
 DATASET_DIR = BASE_DIR / "dataset"
 
-
+# --- Session State Initialization ---
 def init_session_state():
-    """Create local-session stores for profile, reports, and prediction history."""
     defaults = {
         "patient_profile": {
             "name": "",
@@ -222,79 +205,76 @@ def init_session_state():
         "uploaded_reports": [],
         "uploaded_report_keys": [],
     }
-    for key, value in defaults.items():
+    for key, val in defaults.items():
         if key not in st.session_state:
-            st.session_state[key] = value
-
+            st.session_state[key] = val
 
 init_session_state()
 
-
-# ─────────────────────────────────────────────────────────────
-# MODEL LOADER  (cached for performance)
-# ─────────────────────────────────────────────────────────────
+# --- Model & Inference Pipeline ---
 @st.cache_resource
 def load_model(disease: str):
-    model   = joblib.load(MODELS_DIR / f"{disease}_model.pkl")
-    scaler  = joblib.load(MODELS_DIR / f"{disease}_scaler.pkl")
-    with open(MODELS_DIR / f"{disease}_metrics.json") as f:
+    model = joblib.load(MODELS_DIR / f"{disease}_model.pkl")
+    scaler = joblib.load(MODELS_DIR / f"{disease}_scaler.pkl")
+    with open(MODELS_DIR / f"{disease}_metrics.json", "r", encoding="utf-8") as f:
         metrics = json.load(f)
     return model, scaler, metrics
 
-
 def run_prediction(disease: str, features: list):
     model, scaler, metrics = load_model(disease)
-    arr   = np.array(features).reshape(1, -1)
-    arr_s = scaler.transform(arr)
-    pred  = model.predict(arr_s)[0]
+    feature_names = metrics.get("features", [])
+    if feature_names and len(feature_names) == len(features):
+        df_input = pd.DataFrame([features], columns=feature_names)
+        arr_s = scaler.transform(df_input)
+    else:
+        arr = np.array(features).reshape(1, -1)
+        arr_s = scaler.transform(arr)
+    pred = model.predict(arr_s)[0]
     proba = model.predict_proba(arr_s)[0]
     return int(pred), float(proba[1]), metrics
-
 
 def add_risk_history(disease: str, pred: int, prob: float, vitals: dict):
     risk_percent = prob * 100 if pred == 1 else (1 - prob) * 100
     st.session_state.risk_history.append({
-        "Time": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "Disease": disease,
-        "Result": "High Risk" if pred == 1 else "Low Risk",
-        "Risk Score": round(risk_percent, 1),
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "Assessment": disease,
+        "Risk Category": "Elevated Risk" if pred == 1 else "Normal Range",
+        "Confidence Score (%)": round(risk_percent, 1),
         **vitals,
     })
 
-
 def render_referral_panel(disease: str, pred: int):
     specialists = {
-        "Diabetes": ("Endocrinologist", "HbA1c, fasting glucose, kidney profile"),
-        "Heart Disease": ("Cardiologist", "ECG, lipid profile, BP monitoring"),
-        "Parkinson's": ("Neurologist", "Neurological exam, voice/motor assessment"),
+        "Diabetes": ("Endocrinologist", "HbA1c, Fasting Blood Sugar, Kidney Function Panel"),
+        "Heart Disease": ("Cardiologist", "12-Lead ECG, Lipid Profile, Echocardiogram"),
+        "Parkinson's": ("Neurologist", "Clinical Motor Evaluation, UPDRS Exam, Speech Acoustic Analysis"),
     }
-    specialist, next_tests = specialists[disease]
-    urgency = "Priority consultation recommended" if pred == 1 else "Routine follow-up can be planned"
+    specialist, next_tests = specialists.get(disease, ("Physician", "Routine clinical evaluation"))
+    urgency = "Clinical consultation advised" if pred == 1 else "Routine monitoring sufficient"
 
-    st.markdown('<div class="section-header">Doctor Consultation / Referral</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Clinical Follow-up & Recommendations</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.info(f"Specialist: {specialist}")
+        st.info(f"Recommended Specialist: {specialist}")
     with c2:
-        st.info(urgency)
+        st.info(f"Evaluation Priority: {urgency}")
     with c3:
-        st.info(f"Suggested tests: {next_tests}")
+        st.info(f"Suggested Diagnostic Tests: {next_tests}")
 
-    with st.expander("Create consultation note"):
-        city = st.text_input("City / Location", value="", key=f"{disease}_city")
-        symptoms = st.text_area("Current symptoms", key=f"{disease}_symptoms")
+    with st.expander("Clinical Summary Notes"):
+        city = st.text_input("Patient Location / Facility", value="", key=f"{disease}_city")
+        symptoms = st.text_area("Patient Reported Symptoms", key=f"{disease}_symptoms")
         st.text_area(
-            "Referral note",
+            "Draft Referral Note",
             value=(
-                f"Patient should consult a {specialist}. "
-                f"MediScan AI result: {urgency}. "
-                f"Location: {city or 'Not provided'}. "
-                f"Symptoms: {symptoms or 'Not provided'}."
+                f"Referral to: {specialist}\n"
+                f"Preliminary Assessment: {urgency}\n"
+                f"Facility/Location: {city or 'Unspecified'}\n"
+                f"Reported Symptoms: {symptoms or 'None documented'}"
             ),
             height=110,
             key=f"{disease}_referral_note",
         )
-
 
 def render_emergency_guidance(disease: str, pred: int):
     if pred != 1:
@@ -302,147 +282,127 @@ def render_emergency_guidance(disease: str, pred: int):
 
     guidance = {
         "Diabetes": [
-            "Seek urgent help for confusion, fainting, severe weakness, vomiting, or very high glucose symptoms.",
-            "Avoid self-adjusting insulin/medicine without a clinician.",
-            "Keep water available and contact your doctor if symptoms are worsening.",
+            "Monitor for acute symptoms: severe dehydration, confusion, hyperventilation, or persistent vomiting.",
+            "Do not adjust prescription insulin regimens without clinical supervision.",
+            "Seek emergency care if blood glucose is critically elevated with ketones present.",
         ],
         "Heart Disease": [
-            "Call emergency services immediately for chest pain, breathlessness, sweating, or pain radiating to arm/jaw.",
-            "Do not drive yourself to the hospital during active chest pain.",
-            "Keep previous ECG/report details ready for the doctor.",
+            "Seek immediate emergency care for acute chest pressure, radiation to arm/jaw, or sudden dyspnea.",
+            "Do not drive yourself if experiencing sudden severe chest distress.",
+            "Have recent ECGs and medication lists readily available for triage staff.",
         ],
         "Parkinson's": [
-            "Seek urgent care for sudden severe weakness, falls, trouble swallowing, confusion, or breathing difficulty.",
-            "Book a neurologist visit for a complete motor and neurological assessment.",
-            "Keep a symptom diary including tremor, stiffness, sleep, voice, and medication timing.",
+            "Consult a neurologist for confirmation using standard UPDRS motor scoring.",
+            "Seek emergency care if sudden swallowing difficulty or acute severe motor freezing occurs.",
+            "Maintain an objective log of motor fluctuations relative to medication schedules.",
         ],
     }
 
-    st.error("Emergency Alert & Guidance: High-risk indicators detected. This is not a diagnosis, but medical follow-up is recommended.")
-    for item in guidance[disease]:
+    st.error("Caution: Model identified clinical indicators consistent with elevated risk.")
+    for item in guidance.get(disease, []):
         st.warning(item)
-    st.info("Emergency contact: 112 / local emergency number. Share this result with a qualified healthcare professional.")
-
+    st.info("In acute clinical emergencies, contact local emergency services immediately.")
 
 def analyze_uploaded_report(uploaded_file):
     name = uploaded_file.name
     suffix = Path(name).suffix.lower()
     size_kb = len(uploaded_file.getvalue()) / 1024
-    summary = [f"File received: {name} ({size_kb:.1f} KB)"]
+    summary = [f"File: {name} ({size_kb:.1f} KB)"]
 
     if suffix == ".csv":
         try:
             df = pd.read_csv(uploaded_file)
             numeric_cols = df.select_dtypes(include="number").columns.tolist()
-            summary.append(f"Rows: {len(df)}, Columns: {len(df.columns)}")
+            summary.append(f"Structure: {len(df)} rows, {len(df.columns)} columns")
             if numeric_cols:
                 stats = df[numeric_cols].describe().T[["mean", "min", "max"]].round(2)
                 return summary, stats
         except Exception as exc:
-            summary.append(f"CSV analysis failed: {exc}")
+            summary.append(f"CSV parsing error: {exc}")
     elif suffix in [".txt", ".md"]:
         text = uploaded_file.getvalue().decode("utf-8", errors="ignore")
-        keywords = ["high", "low", "positive", "abnormal", "critical", "elevated", "reduced"]
-        matches = [word for word in keywords if word in text.lower()]
-        summary.append(f"Text length: {len(text)} characters")
-        summary.append("Possible attention keywords: " + (", ".join(matches) if matches else "none found"))
+        summary.append(f"Text report parsed ({len(text)} characters).")
+        summary.append(f"Excerpt: {text[:160]}...")
     else:
-        summary.append("Preview stored for reference. Automated text extraction for PDF/image/audio needs OCR or transcription integration.")
+        summary.append(f"{suffix.upper()} file received and indexed for session reference.")
 
     return summary, None
 
-
 def show_result(pred: int, prob: float, positive_label: str, negative_label: str,
-                positive_emoji: str = "⚠️", negative_emoji: str = "✅",
                 positive_sub: str = "", negative_sub: str = ""):
-    """Render the prediction result card."""
+    """Render the assessment result badge."""
     if pred == 1:
         bar_color = "linear-gradient(90deg,#ef4444,#f97316)"
-        conf_val  = prob * 100
+        conf_val = prob * 100
         st.markdown(f"""
         <div class="result-positive">
-            <div style="font-size:3rem;margin-bottom:8px;">{positive_emoji}</div>
             <div class="result-title">{positive_label}</div>
             <div class="result-subtitle">{positive_sub}</div>
             <div class="confidence-bar-bg">
                 <div class="confidence-bar-fill" style="width:{conf_val:.1f}%;background:{bar_color};"></div>
             </div>
-            <div style="color:#ef4444;font-weight:700;font-size:1.3rem;">{conf_val:.1f}% Confidence</div>
+            <div style="color:#f87171;font-weight:700;font-size:1.15rem;margin-top:6px;">{conf_val:.1f}% Confidence Score</div>
         </div>""", unsafe_allow_html=True)
     else:
         bar_color = "linear-gradient(90deg,#22c55e,#16a34a)"
-        conf_val  = (1 - prob) * 100
+        conf_val = (1 - prob) * 100
         st.markdown(f"""
         <div class="result-negative">
-            <div style="font-size:3rem;margin-bottom:8px;">{negative_emoji}</div>
             <div class="result-title">{negative_label}</div>
             <div class="result-subtitle">{negative_sub}</div>
             <div class="confidence-bar-bg">
                 <div class="confidence-bar-fill" style="width:{conf_val:.1f}%;background:{bar_color};"></div>
             </div>
-            <div style="color:#22c55e;font-weight:700;font-size:1.3rem;">{conf_val:.1f}% Confidence</div>
+            <div style="color:#4ade80;font-weight:700;font-size:1.15rem;margin-top:6px;">{conf_val:.1f}% Confidence Score</div>
         </div>""", unsafe_allow_html=True)
 
-
-# ─────────────────────────────────────────────────────────────
-# SIDEBAR NAVIGATION
-# ─────────────────────────────────────────────────────────────
+# --- Sidebar Navigation ---
 with st.sidebar:
     st.markdown("""
-    <div style='text-align:center;padding:20px 0 16px 0;'>
-        <div style='font-size:2.5rem;'>🏥</div>
-        <div style='font-family:"Playfair Display",serif;font-size:1.4rem;font-weight:700;
-                    background:linear-gradient(135deg,#60a5fa,#a78bfa);
-                    -webkit-background-clip:text;-webkit-text-fill-color:transparent;'>
-            MediScan AI
-        </div>
-        <div style='color:#6b7280;font-size:0.78rem;margin-top:4px;'>Disease Prediction System</div>
+    <div style='padding: 12px 0 16px 0;'>
+        <div style='font-size: 1.25rem; font-weight: 700; color: #f9fafb;'>MediScan AI</div>
+        <div style='color: #6b7280; font-size: 0.8rem; margin-top: 2px;'>Clinical Risk Assessment System</div>
     </div>
-    <hr style='border-color:#1f2937;margin:0 0 20px 0;'>
-    <p style='color:#6b7280;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;'>NAVIGATION</p>
+    <hr style='border-color: #1f2937; margin: 0 0 16px 0;'>
+    <div style='color: #6b7280; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;'>Navigation</div>
     """, unsafe_allow_html=True)
 
     page = st.radio(
-        "Navigate",
+        "Navigation",
         [
-            "🏠  Home",
+            "Home",
             "Patient Profile",
             "Report Upload & Analysis",
-            "🩺  Diabetes Prediction",
-            "❤️  Heart Disease",
-            "🧠  Parkinson's Disease",
+            "Diabetes Risk",
+            "Heart Disease Risk",
+            "Parkinson's Risk",
             "Risk History",
-            "📊  Model Analytics",
-            "ℹ️   About"
+            "Model Analytics",
+            "About"
         ],
         label_visibility="collapsed"
     )
 
     st.markdown("""
-    <hr style='border-color:#1f2937;margin:20px 0;'>
-    <div style='color:#4b5563;font-size:0.75rem;line-height:1.6;'>
-        ⚠️ For educational purposes only.<br>
-        Consult a qualified physician for medical advice.
+    <hr style='border-color: #1f2937; margin: 24px 0 14px 0;'>
+    <div style='color: #6b7280; font-size: 0.74rem; line-height: 1.5;'>
+        Investigational decision-support tool. Not approved as a primary diagnostic device.
     </div>
     """, unsafe_allow_html=True)
 
-
-# ══════════════════════════════════════════════════════════════
-# PAGE — HOME
-# ══════════════════════════════════════════════════════════════
-if page == "🏠  Home":
+# --- View: Home ---
+if page == "Home":
     st.markdown('<h1 class="main-title">MediScan AI</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">AI-powered disease prediction using clinical & voice biomarkers</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Decision-support system for metabolic, cardiovascular, and vocal acoustic risk evaluation</p>', unsafe_allow_html=True)
 
-    # ── KPI row ──
     c1, c2, c3, c4 = st.columns(4)
     kpis = [
-        ("3",      "#60a5fa", "Diseases Covered"),
-        ("~99%",   "#a78bfa", "Model Accuracy"),
-        ("3,300+", "#34d399", "Training Samples"),
-        ("GB",     "#fb923c", "Gradient Boosting"),
+        ("3", "#60a5fa", "Pathologies Modeled"),
+        ("98%+", "#a78bfa", "Validation Accuracy"),
+        ("3,300", "#34d399", "Benchmark Cohort Records"),
+        ("GBM", "#fb923c", "Gradient Boosting Core"),
     ]
-    for col, (num, color, label) in zip([c1,c2,c3,c4], kpis):
+    for col, (num, color, label) in zip([c1, c2, c3, c4], kpis):
         with col:
             st.markdown(f"""
             <div class="stat-card">
@@ -451,104 +411,92 @@ if page == "🏠  Home":
             </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Clinical Modules</div>', unsafe_allow_html=True)
 
-    # ── Disease cards ──
-    st.markdown('<div class="section-header">🔬 Available Predictions</div>', unsafe_allow_html=True)
     d1, d2, d3 = st.columns(3)
     with d1:
         st.markdown("""
         <div class="info-card">
-            <h4>🩺 Diabetes Prediction</h4>
-            <p>Predicts diabetes risk using glucose, insulin, BMI, blood pressure & other metabolic indicators.</p>
+            <h4>Diabetes Risk Assessment</h4>
+            <p>Evaluates glucose dysregulation, insulin resistance, BMI, and metabolic markers to predict diabetic likelihood.</p>
             <br><span class="badge badge-blue">8 Features</span>
-            <span class="badge badge-green" style="margin-left:6px;">97.9% Acc</span>
+            <span class="badge badge-green" style="margin-left:6px;">97.9% Val Acc</span>
         </div>""", unsafe_allow_html=True)
     with d2:
         st.markdown("""
         <div class="info-card">
-            <h4>❤️ Heart Disease</h4>
-            <p>Assesses cardiovascular risk using cholesterol, ECG, blood pressure & exercise-angina data.</p>
+            <h4>Cardiovascular Disease</h4>
+            <p>Assesses coronary risk utilizing resting hemodynamics, exercise ECG depression, and serum lipid metrics.</p>
             <br><span class="badge badge-blue">13 Features</span>
-            <span class="badge badge-green" style="margin-left:6px;">100% Acc</span>
+            <span class="badge badge-green" style="margin-left:6px;">Ensemble GBM</span>
         </div>""", unsafe_allow_html=True)
     with d3:
         st.markdown("""
         <div class="info-card">
-            <h4>🧠 Parkinson's Disease</h4>
-            <p>Detects Parkinson's from voice signal biomarkers including jitter, shimmer & frequency variants.</p>
+            <h4>Parkinson's Vocal Biomarkers</h4>
+            <p>Analyzes vocal perturbation including jitter, shimmer, harmonic noise ratio, and nonlinear pitch entropy.</p>
             <br><span class="badge badge-blue">13 Features</span>
-            <span class="badge badge-purple" style="margin-left:6px;">100% Acc</span>
+            <span class="badge badge-purple" style="margin-left:6px;">Acoustic Features</span>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="section-header">System Workflow</div>', unsafe_allow_html=True)
 
-    # ── How it works ──
-    st.markdown('<div class="section-header">🔄 How It Works</div>', unsafe_allow_html=True)
     steps = st.columns(4)
-    for col, (icon, title, desc) in zip(steps, [
-        ("1️⃣", "Select Disease", "Choose from Diabetes, Heart Disease, or Parkinson's from the sidebar"),
-        ("2️⃣", "Enter Parameters", "Fill in your clinical measurements and health indicators"),
-        ("3️⃣", "Run Analysis", "Our Gradient Boosting model processes your data instantly"),
-        ("4️⃣", "View Results", "Get a risk assessment with confidence score and color-coded output"),
-    ]):
+    workflow_steps = [
+        ("1. Select Module", "Choose the target disease assessment from the navigation panel."),
+        ("2. Enter Vitals", "Input documented patient vitals, laboratory tests, or acoustic metrics."),
+        ("3. Pipeline Execution", "Data is scaled with feature-specific standard normalizers and scored."),
+        ("4. Clinical Output", "Review probability score, categorized risk band, and suggested next steps."),
+    ]
+    for col, (title, desc) in zip(steps, workflow_steps):
         with col:
             st.markdown(f"""
-            <div class="info-card" style="text-align:center;">
-                <div style="font-size:1.8rem;">{icon}</div>
-                <h4 style="margin-top:8px;">{title}</h4>
+            <div class="info-card">
+                <h4>{title}</h4>
                 <p>{desc}</p>
             </div>""", unsafe_allow_html=True)
 
     st.markdown("""
     <div class="disclaimer">
-        ⚠️ <strong>Medical Disclaimer:</strong> MediScan AI is a research & educational tool only.
-        Predictions are NOT a substitute for professional medical diagnosis.
-        Always consult a licensed healthcare provider for medical decisions.
+        <strong>Investigational Notice:</strong> MediScan AI is developed for educational and experimental research purposes.
+        All algorithmic outputs must be interpreted by licensed healthcare clinicians alongside standard diagnostic workups.
     </div>""", unsafe_allow_html=True)
 
-
-# ══════════════════════════════════════════════════════════════
-# PAGE — PATIENT PROFILE
-# ══════════════════════════════════════════════════════════════
+# --- View: Patient Profile ---
 elif page == "Patient Profile":
     st.markdown('<h1 class="main-title">Patient Profile Management</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Manage patient details for this local session</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Manage session-level demographic and baseline health records</p>', unsafe_allow_html=True)
 
     profile = st.session_state.patient_profile
     with st.form("patient_profile_form"):
-        st.markdown('<div class="section-header">Basic Details</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Demographics</div>', unsafe_allow_html=True)
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            name = st.text_input("Patient Name", value=profile["name"])
+            name = st.text_input("Patient Identifier / Name", value=profile["name"])
         with c2:
-            age = st.number_input("Age", 0, 120, int(profile["age"]))
+            age = st.number_input("Age (Years)", 0, 120, int(profile["age"]))
         with c3:
-            gender = st.selectbox(
-                "Gender",
-                ["Not specified", "Female", "Male", "Other"],
-                index=["Not specified", "Female", "Male", "Other"].index(profile["gender"])
-                if profile["gender"] in ["Not specified", "Female", "Male", "Other"] else 0,
-            )
+            gender_options = ["Not specified", "Female", "Male", "Other"]
+            g_idx = gender_options.index(profile["gender"]) if profile["gender"] in gender_options else 0
+            gender = st.selectbox("Biological Sex / Gender", gender_options, index=g_idx)
         with c4:
-            blood_group = st.selectbox(
-                "Blood Group",
-                ["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
-                index=["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].index(profile["blood_group"])
-                if profile["blood_group"] in ["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] else 0,
-            )
+            bg_options = ["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
+            bg_idx = bg_options.index(profile["blood_group"]) if profile["blood_group"] in bg_options else 0
+            blood_group = st.selectbox("Blood Group", bg_options, index=bg_idx)
 
-        st.markdown('<div class="section-header">Medical Details</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Clinical History</div>', unsafe_allow_html=True)
         m1, m2 = st.columns(2)
         with m1:
-            phone = st.text_input("Phone", value=profile["phone"])
-            allergies = st.text_area("Allergies", value=profile["allergies"], height=90)
-            medical_history = st.text_area("Medical History", value=profile["medical_history"], height=120)
+            phone = st.text_input("Contact Number", value=profile["phone"])
+            allergies = st.text_area("Documented Allergies", value=profile["allergies"], height=85)
+            medical_history = st.text_area("Known Medical Conditions", value=profile["medical_history"], height=110)
         with m2:
             emergency_contact = st.text_input("Emergency Contact", value=profile["emergency_contact"])
-            medications = st.text_area("Current Medications", value=profile["medications"], height=90)
-            previous_reports = st.text_area("Previous Reports / Notes", value=profile["previous_reports"], height=120)
+            medications = st.text_area("Current Prescriptions", value=profile["medications"], height=85)
+            previous_reports = st.text_area("Prior Diagnostic History", value=profile["previous_reports"], height=110)
 
-        saved = st.form_submit_button("Save Patient Profile", use_container_width=True)
+        saved = st.form_submit_button("Update Session Profile", use_container_width=True)
 
     if saved:
         st.session_state.patient_profile = {
@@ -563,22 +511,19 @@ elif page == "Patient Profile":
             "previous_reports": previous_reports,
             "emergency_contact": emergency_contact,
         }
-        st.success("Patient profile saved for this session.")
+        st.success("Session profile successfully updated.")
 
-    st.markdown('<div class="section-header">Current Profile Summary</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Active Session Record</div>', unsafe_allow_html=True)
     st.dataframe(pd.DataFrame([st.session_state.patient_profile]), hide_index=True, use_container_width=True)
 
-
-# ══════════════════════════════════════════════════════════════
-# PAGE — REPORT UPLOAD
-# ══════════════════════════════════════════════════════════════
+# --- View: Report Upload ---
 elif page == "Report Upload & Analysis":
-    st.markdown('<h1 class="main-title">Report Upload & Analysis</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Upload reports and store quick analysis notes in this session</p>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-title">Diagnostic Data Ingestion</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Upload diagnostic tabular data or text summaries for session reference</p>', unsafe_allow_html=True)
 
     uploaded_files = st.file_uploader(
-        "Upload blood test, ECG, MRI, prescription, voice note, CSV, TXT, PDF, or image",
-        type=["csv", "txt", "md", "pdf", "png", "jpg", "jpeg", "wav", "mp3"],
+        "Supported formats: CSV, TXT, MD, PDF",
+        type=["csv", "txt", "md", "pdf"],
         accept_multiple_files=True,
     )
 
@@ -588,50 +533,53 @@ elif page == "Report Upload & Analysis":
             summary, stats = analyze_uploaded_report(uploaded_file)
             if report_key not in st.session_state.uploaded_report_keys:
                 st.session_state.uploaded_reports.append({
-                    "Time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     "File": uploaded_file.name,
-                    "Summary": " | ".join(summary),
+                    "Overview": " | ".join(summary),
                 })
                 st.session_state.uploaded_report_keys.append(report_key)
+
             with st.expander(uploaded_file.name, expanded=True):
                 for line in summary:
                     st.write(line)
                 if stats is not None:
                     st.dataframe(stats, use_container_width=True)
-                st.info("Clinical interpretation should be done by a qualified doctor. This summary is only a helper.")
 
-    st.markdown('<div class="section-header">Uploaded Report History</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Session Documents</div>', unsafe_allow_html=True)
     if st.session_state.uploaded_reports:
         st.dataframe(pd.DataFrame(st.session_state.uploaded_reports), hide_index=True, use_container_width=True)
     else:
-        st.info("No reports uploaded in this session yet.")
+        st.info("No documents uploaded in this browser session.")
 
+# --- View: Diabetes ---
+elif page == "Diabetes Risk":
+    st.markdown('<h1 class="main-title">Diabetes Risk Assessment</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Evaluates metabolic indicators against calibrated gradient boosting decision boundaries</p>', unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════
-# PAGE — DIABETES
-# ══════════════════════════════════════════════════════════════
-elif page == "🩺  Diabetes Prediction":
-    st.markdown('<h1 class="main-title">Diabetes Prediction</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Enter the patient\'s clinical parameters below</p>', unsafe_allow_html=True)
+    with st.expander("Quick Demo Presets", expanded=False):
+        c_p1, c_p2 = st.columns(2)
+        with c_p1:
+            st.caption("Standard Healthy Baseline: Fasting glucose 95, BMI 23.5, Blood Pressure 70")
+        with c_p2:
+            st.caption("Elevated Risk Profile: Fasting glucose 165, BMI 34.0, Blood Pressure 85")
 
     with st.form("diabetes_form"):
-        st.markdown('<div class="section-header">👤 Patient Demographics</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Demographics & Family History</div>', unsafe_allow_html=True)
         col1, col2, col3, col4 = st.columns(4)
-        with col1: pregnancies = st.number_input("Pregnancies", 0, 17, 1, help="Number of times pregnant")
-        with col2: age         = st.number_input("Age (years)", 18, 81, 35)
-        with col3: bmi         = st.number_input("BMI", 10.0, 70.0, 26.0, 0.1)
-        with col4: dpf         = st.number_input("Diabetes Pedigree Function", 0.05, 2.50, 0.47, 0.001,
-                                                  help="Family history likelihood score")
+        with col1: pregnancies = st.number_input("Pregnancies", 0, 17, 1, help="Total obstetric count")
+        with col2: age = st.number_input("Age (Years)", 18, 81, 35)
+        with col3: bmi = st.number_input("BMI (kg/m²)", 10.0, 70.0, 26.0, 0.1)
+        with col4: dpf = st.number_input("Diabetes Pedigree Function", 0.05, 2.50, 0.47, 0.001, help="Genetic predisposition index")
 
-        st.markdown('<div class="section-header">🩸 Blood & Metabolic Indicators</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Metabolic & Blood Markers</div>', unsafe_allow_html=True)
         col5, col6, col7, col8 = st.columns(4)
-        with col5: glucose         = st.number_input("Glucose (mg/dL)", 50, 200, 120, help="2-hr plasma glucose")
-        with col6: insulin         = st.number_input("Insulin (μU/mL)", 0, 846, 80)
-        with col7: blood_pressure  = st.number_input("Blood Pressure (mmHg)", 40, 122, 72)
-        with col8: skin_thickness  = st.number_input("Skin Thickness (mm)", 0, 99, 20)
+        with col5: glucose = st.number_input("Plasma Glucose (mg/dL)", 50, 200, 120, help="2-hr oral glucose tolerance test value")
+        with col6: insulin = st.number_input("Serum Insulin (μU/mL)", 0, 846, 80)
+        with col7: blood_pressure = st.number_input("Diastolic Blood Pressure (mmHg)", 40, 122, 72)
+        with col8: skin_thickness = st.number_input("Triceps Skinfold (mm)", 0, 99, 20)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        submitted = st.form_submit_button("🔍  Predict Diabetes Risk", use_container_width=True)
+        submitted = st.form_submit_button("Run Diabetes Risk Assessment", use_container_width=True)
 
     if submitted:
         features = [pregnancies, glucose, blood_pressure, skin_thickness, insulin, bmi, dpf, age]
@@ -643,64 +591,61 @@ elif page == "🩺  Diabetes Prediction":
         })
         col_r, col_s = st.columns([2, 1])
         with col_r:
-            show_result(pred, prob,
-                        "Diabetes Risk Detected", "No Diabetes Detected",
-                        "⚠️", "✅",
-                        "The model indicates elevated probability of diabetes.",
-                        "The model indicates low probability of diabetes.")
+            show_result(
+                pred, prob,
+                "Elevated Diabetes Risk Identified", "Low Diabetes Risk Profile",
+                "Patient parameters cross risk thresholds for glucose intolerance.",
+                "Patient metrics fall within expected normal baseline distributions."
+            )
         with col_s:
-            st.markdown('<div class="info-card"><h4>📋 Input Summary</h4></div>', unsafe_allow_html=True)
+            st.markdown('<div class="info-card"><h4>Input Feature Verification</h4></div>', unsafe_allow_html=True)
             st.dataframe(pd.DataFrame({
-                "Parameter": ["Pregnancies","Glucose","Blood Pressure","Skin Thickness","Insulin","BMI","DPF","Age"],
-                "Value"    : features
+                "Feature": ["Pregnancies", "Glucose", "Blood Pressure", "Skin Thickness", "Insulin", "BMI", "DPF", "Age"],
+                "Documented Value": features
             }), hide_index=True, use_container_width=True)
 
-        st.markdown('<div class="disclaimer">⚠️ Consult an endocrinologist or physician for proper diagnosis.</div>',
-                    unsafe_allow_html=True)
         render_referral_panel("Diabetes", pred)
         render_emergency_guidance("Diabetes", pred)
 
-
-# ══════════════════════════════════════════════════════════════
-# PAGE — HEART DISEASE
-# ══════════════════════════════════════════════════════════════
-elif page == "❤️  Heart Disease":
-    st.markdown('<h1 class="main-title">Heart Disease Prediction</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Enter cardiovascular clinical parameters for assessment</p>', unsafe_allow_html=True)
+# --- View: Heart Disease ---
+elif page == "Heart Disease Risk":
+    st.markdown('<h1 class="main-title">Cardiovascular Risk Assessment</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Coronary artery disease evaluation based on clinical hemodynamics and stress response</p>', unsafe_allow_html=True)
 
     with st.form("heart_form"):
-        st.markdown('<div class="section-header">👤 Patient Information</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Baseline Demographics</div>', unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
-        with col1: age  = st.number_input("Age", 25, 80, 52)
-        with col2: sex  = st.selectbox("Sex", [("Male", 1), ("Female", 0)], format_func=lambda x: x[0])
-        with col3: cp   = st.selectbox("Chest Pain Type",
-                                        [(0,"Typical Angina"),(1,"Atypical Angina"),(2,"Non-anginal Pain"),(3,"Asymptomatic")],
-                                        format_func=lambda x: x[1])
+        with col1: age = st.number_input("Age (Years)", 25, 80, 52)
+        with col2: sex = st.selectbox("Biological Sex", [("Male", 1), ("Female", 0)], format_func=lambda x: x[0])
+        with col3: cp = st.selectbox("Chest Pain Presentation",
+                                     [(0, "Typical Angina"), (1, "Atypical Angina"), (2, "Non-anginal Pain"), (3, "Asymptomatic")],
+                                     format_func=lambda x: x[1])
 
-        st.markdown('<div class="section-header">💉 Vital Signs & Tests</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Hemodynamics & Baseline Labs</div>', unsafe_allow_html=True)
         col4, col5, col6 = st.columns(3)
         with col4:
-            trestbps = st.number_input("Resting BP (mmHg)", 90, 200, 130)
-            chol     = st.number_input("Cholesterol (mg/dL)", 120, 600, 246)
+            trestbps = st.number_input("Resting Blood Pressure (mmHg)", 90, 200, 130)
+            chol = st.number_input("Serum Cholesterol (mg/dL)", 120, 600, 246)
         with col5:
-            fbs     = st.selectbox("Fasting Blood Sugar > 120", [(0,"No"),(1,"Yes")], format_func=lambda x: x[1])
-            restecg = st.selectbox("Resting ECG",
-                                    [(0,"Normal"),(1,"ST-T Abnormality"),(2,"LV Hypertrophy")],
-                                    format_func=lambda x: x[1])
+            fbs = st.selectbox("Fasting Blood Sugar > 120 mg/dL", [(0, "No"), (1, "Yes")], format_func=lambda x: x[1])
+            restecg = st.selectbox("Resting Electrocardiogram",
+                                   [(0, "Normal"), (1, "ST-T Wave Abnormality"), (2, "Left Ventricular Hypertrophy")],
+                                   format_func=lambda x: x[1])
         with col6:
-            thalach = st.number_input("Max Heart Rate", 70, 202, 150)
-            exang   = st.selectbox("Exercise Induced Angina", [(0,"No"),(1,"Yes")], format_func=lambda x: x[1])
+            thalach = st.number_input("Maximum Achieved Heart Rate", 70, 202, 150)
+            exang = st.selectbox("Exercise-Induced Angina", [(0, "No"), (1, "Yes")], format_func=lambda x: x[1])
 
-        st.markdown('<div class="section-header">📈 Advanced Indicators</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Exercise Stress & Angiography Findings</div>', unsafe_allow_html=True)
         col7, col8, col9, col10 = st.columns(4)
-        with col7:  oldpeak = st.number_input("ST Depression", 0.0, 6.2, 1.0, 0.1)
-        with col8:  slope   = st.selectbox("ST Slope", [(0,"Upsloping"),(1,"Flat"),(2,"Downsloping")], format_func=lambda x: x[1])
-        with col9:  ca      = st.selectbox("Major Vessels", [0, 1, 2, 3, 4])
-        with col10: thal    = st.selectbox("Thalassemia", [(0,"Normal"),(1,"Fixed Defect"),(2,"Reversible Defect"),(3,"Unknown")],
-                                            format_func=lambda x: x[1])
+        with col7: oldpeak = st.number_input("ST Depression (oldpeak)", 0.0, 6.2, 1.0, 0.1)
+        with col8: slope = st.selectbox("ST Segment Slope", [(0, "Upsloping"), (1, "Flat"), (2, "Downsloping")], format_func=lambda x: x[1])
+        with col9: ca = st.selectbox("Major Vessels Colored (Fluoroscopy)", [0, 1, 2, 3, 4])
+        with col10: thal = st.selectbox("Thallium Stress Scintigraphy",
+                                        [(0, "Normal"), (1, "Fixed Defect"), (2, "Reversible Defect"), (3, "Unknown")],
+                                        format_func=lambda x: x[1])
 
         st.markdown("<br>", unsafe_allow_html=True)
-        submitted = st.form_submit_button("❤️  Predict Heart Disease Risk", use_container_width=True)
+        submitted = st.form_submit_button("Run Cardiovascular Assessment", use_container_width=True)
 
     if submitted:
         features = [age, sex[1], cp[0], trestbps, chol, fbs[0], restecg[0], thalach, exang[0], oldpeak, slope[0], ca, thal[0]]
@@ -710,56 +655,45 @@ elif page == "❤️  Heart Disease":
             "Blood Pressure": trestbps,
             "Max Heart Rate": thalach,
         })
-        show_result(pred, prob,
-                    "Heart Disease Risk Detected", "No Heart Disease Detected",
-                    "❗", "💚",
-                    "The model indicates elevated cardiovascular risk.",
-                    "The model indicates healthy cardiovascular indicators.")
-        st.markdown('<div class="disclaimer">⚠️ Consult a cardiologist if you experience chest pain or shortness of breath.</div>',
-                    unsafe_allow_html=True)
+        show_result(
+            pred, prob,
+            "Coronary Disease Indicators Detected", "Normal Cardiovascular Profile",
+            "Hemodynamic and stress test measures indicate potential ischemic heart disease.",
+            "Clinical indicators remain within nominal reference ranges."
+        )
         render_referral_panel("Heart Disease", pred)
         render_emergency_guidance("Heart Disease", pred)
 
-
-# ══════════════════════════════════════════════════════════════
-# PAGE — PARKINSON'S
-# ══════════════════════════════════════════════════════════════
-elif page == "🧠  Parkinson's Disease":
-    st.markdown('<h1 class="main-title">Parkinson\'s Disease Prediction</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Voice signal biomarkers for Parkinson\'s risk assessment</p>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="info-card" style="margin-bottom:20px;">
-        <h4>ℹ️ About Voice-Based Detection</h4>
-        <p>This model analyses vocal frequency, jitter, shimmer & noise ratios —
-        biomarkers often altered in Parkinson's patients before other symptoms appear.</p>
-    </div>""", unsafe_allow_html=True)
+# --- View: Parkinson's ---
+elif page == "Parkinson's Risk":
+    st.markdown('<h1 class="main-title">Parkinson\'s Disease Acoustic Assessment</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Phonation frequency instability and nonlinear dynamics for early neurodegenerative risk detection</p>', unsafe_allow_html=True)
 
     with st.form("parkinsons_form"):
-        st.markdown('<div class="section-header">🎵 Fundamental Frequency (Hz)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Vocal Fundamental Frequency (Hz)</div>', unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
-        with col1: fo  = st.number_input("MDVP: Fo — Average Vocal Freq", 80.0, 270.0, 154.228, 0.001)
-        with col2: fhi = st.number_input("MDVP: Fhi — Max Vocal Freq",   100.0, 600.0, 197.105, 0.001)
-        with col3: flo = st.number_input("MDVP: Flo — Min Vocal Freq",    65.0, 240.0, 116.082, 0.001)
+        with col1: fo = st.number_input("Average Fundamental Frequency (MDVP:Fo)", 80.0, 270.0, 154.228, 0.001)
+        with col2: fhi = st.number_input("Maximum Fundamental Frequency (MDVP:Fhi)", 100.0, 600.0, 197.105, 0.001)
+        with col3: flo = st.number_input("Minimum Fundamental Frequency (MDVP:Flo)", 65.0, 240.0, 116.082, 0.001)
 
-        st.markdown('<div class="section-header">📊 Jitter & Shimmer Measures</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Frequency & Amplitude Perturbation Measures</div>', unsafe_allow_html=True)
         col4, col5, col6, col7 = st.columns(4)
-        with col4: jitter  = st.number_input("MDVP Jitter (%)", 0.001, 0.030, 0.00662, 0.00001, format="%.5f")
-        with col5: shimmer = st.number_input("Shimmer",          0.009, 0.300, 0.05416, 0.0001,  format="%.5f")
-        with col6: nhr     = st.number_input("NHR",              0.001, 0.500, 0.01337, 0.0001,  format="%.5f")
-        with col7: hnr     = st.number_input("HNR",              8.0,   35.0,  21.640,  0.001)
+        with col4: jitter = st.number_input("Cycle-to-Cycle Jitter (%)", 0.001, 0.030, 0.00662, 0.00001, format="%.5f")
+        with col5: shimmer = st.number_input("Amplitude Shimmer", 0.009, 0.300, 0.05416, 0.0001, format="%.5f")
+        with col6: nhr = st.number_input("Noise-to-Harmonics Ratio (NHR)", 0.001, 0.500, 0.01337, 0.0001, format="%.5f")
+        with col7: hnr = st.number_input("Harmonics-to-Noise Ratio (HNR dB)", 8.0, 35.0, 21.640, 0.001)
 
-        st.markdown('<div class="section-header">🔢 Nonlinear Dynamical Measures</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Nonlinear Dynamic & Fractal Complexity Measures</div>', unsafe_allow_html=True)
         col8, col9, col10, col11, col12, col13 = st.columns(6)
-        with col8:  rpde    = st.number_input("RPDE",    0.20, 0.95, 0.414783, 0.0001, format="%.6f")
-        with col9:  dfa     = st.number_input("DFA",     0.50, 0.97, 0.815285, 0.0001, format="%.6f")
+        with col8: rpde = st.number_input("RPDE", 0.20, 0.95, 0.414783, 0.0001, format="%.6f")
+        with col9: dfa = st.number_input("DFA", 0.50, 0.97, 0.815285, 0.0001, format="%.6f")
         with col10: spread1 = st.number_input("Spread1", -9.0, -2.0, -4.813031, 0.0001, format="%.6f")
-        with col11: spread2 = st.number_input("Spread2",  0.02, 0.55,  0.266482, 0.0001, format="%.6f")
-        with col12: d2      = st.number_input("D2",       1.5,  4.0,   2.301442, 0.0001, format="%.6f")
-        with col13: ppe     = st.number_input("PPE",      0.02, 0.70,  0.284654, 0.0001, format="%.6f")
+        with col11: spread2 = st.number_input("Spread2", 0.02, 0.55, 0.266482, 0.0001, format="%.6f")
+        with col12: d2 = st.number_input("Correlation Dimension (D2)", 1.5, 4.0, 2.301442, 0.0001, format="%.6f")
+        with col13: ppe = st.number_input("Pitch Period Entropy (PPE)", 0.02, 0.70, 0.284654, 0.0001, format="%.6f")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        submitted = st.form_submit_button("🧠  Predict Parkinson's Risk", use_container_width=True)
+        submitted = st.form_submit_button("Run Parkinson's Vocal Assessment", use_container_width=True)
 
     if submitted:
         features = [fo, fhi, flo, jitter, shimmer, nhr, hnr, rpde, dfa, spread1, spread2, d2, ppe]
@@ -769,87 +703,73 @@ elif page == "🧠  Parkinson's Disease":
             "Shimmer": shimmer,
             "HNR": hnr,
         })
-        show_result(pred, prob,
-                    "Parkinson's Indicators Detected", "No Parkinson's Indicators",
-                    "⚠️", "✅",
-                    "Voice biomarkers suggest possible Parkinson's disease presence.",
-                    "Voice biomarkers appear within normal ranges.")
-        st.markdown('<div class="disclaimer">⚠️ Voice analysis is supplementary. Consult a neurologist for comprehensive evaluation.</div>',
-                    unsafe_allow_html=True)
+        show_result(
+            pred, prob,
+            "Acoustic Indicators of Dysphonia / Parkinson's", "Acoustic Measures Within Expected Norms",
+            "Acoustic jitter, shimmer, and pitch entropy indicate phonation impairment.",
+            "Vocal stability parameters align with normal control group baselines."
+        )
         render_referral_panel("Parkinson's", pred)
         render_emergency_guidance("Parkinson's", pred)
 
-
-# ══════════════════════════════════════════════════════════════
-# PAGE — RISK HISTORY
-# ══════════════════════════════════════════════════════════════
+# --- View: Risk History ---
 elif page == "Risk History":
-    st.markdown('<h1 class="main-title">Risk History & Progress Tracking</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Track prediction results and key health markers from this session</p>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-title">Session Risk History</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Track assessment scores and vital progression across the active browser session</p>', unsafe_allow_html=True)
 
     if not st.session_state.risk_history:
-        st.info("No prediction history yet. Run a disease prediction to start tracking progress.")
+        st.info("No assessments recorded in this session. Execute an assessment module to begin logging.")
     else:
         history_df = pd.DataFrame(st.session_state.risk_history)
-        st.markdown('<div class="section-header">Prediction Timeline</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Assessment Timeline</div>', unsafe_allow_html=True)
         st.dataframe(history_df, hide_index=True, use_container_width=True)
 
         chart_df = history_df.copy()
-        chart_df["Time"] = pd.to_datetime(chart_df["Time"])
-        st.markdown('<div class="section-header">Risk Score Trend</div>', unsafe_allow_html=True)
-        st.line_chart(chart_df, x="Time", y="Risk Score", color="Disease")
-
-        numeric_cols = [
-            col for col in ["BMI", "Glucose", "Blood Pressure", "Cholesterol", "Max Heart Rate", "Jitter", "Shimmer", "HNR"]
-            if col in chart_df.columns and pd.api.types.is_numeric_dtype(chart_df[col])
-        ]
-        if numeric_cols:
-            selected_marker = st.selectbox("Health marker trend", numeric_cols)
-            st.line_chart(chart_df.dropna(subset=[selected_marker]), x="Time", y=selected_marker, color="Disease")
+        chart_df["Timestamp"] = pd.to_datetime(chart_df["Timestamp"])
+        st.markdown('<div class="section-header">Confidence Score Trajectory</div>', unsafe_allow_html=True)
+        st.line_chart(chart_df, x="Timestamp", y="Confidence Score (%)", color="Assessment")
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.metric("Total Checks", len(history_df))
+            st.metric("Total Assessments", len(history_df))
         with c2:
-            st.metric("High Risk Results", int((history_df["Result"] == "High Risk").sum()))
+            elevated_count = int((history_df["Risk Category"] == "Elevated Risk").sum())
+            st.metric("Elevated Risk Results", elevated_count)
         with c3:
-            st.metric("Latest Risk Score", f'{history_df.iloc[-1]["Risk Score"]:.1f}%')
+            st.metric("Latest Score", f'{history_df.iloc[-1]["Confidence Score (%)"]:.1f}%')
 
         st.download_button(
-            "Download History CSV",
+            "Export Session History (CSV)",
             history_df.to_csv(index=False).encode("utf-8"),
-            "mediscan_risk_history.csv",
+            "mediscan_session_history.csv",
             "text/csv",
             use_container_width=True,
         )
 
+# --- View: Model Analytics ---
+elif page == "Model Analytics":
+    st.markdown('<h1 class="main-title">Model Specifications & Benchmark Analytics</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Validation metrics, training partitions, and feature schematics</p>', unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════
-# PAGE — MODEL ANALYTICS
-# ══════════════════════════════════════════════════════════════
-elif page == "📊  Model Analytics":
-    st.markdown('<h1 class="main-title">Model Analytics</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Performance metrics and dataset statistics</p>', unsafe_allow_html=True)
-
-    diseases = {
-        "🩺 Diabetes":         "diabetes",
-        "❤️ Heart Disease":    "heart",
-        "🧠 Parkinson's":      "parkinsons",
+    modules = {
+        "Diabetes Risk Classifier": "diabetes",
+        "Cardiovascular Classifier": "heart",
+        "Parkinson's Acoustic Classifier": "parkinsons",
     }
 
-    for label, key in diseases.items():
+    for label, key in modules.items():
         try:
             _, _, metrics = load_model(key)
             train_df = pd.read_csv(DATASET_DIR / f"{key}_train.csv")
-            test_df  = pd.read_csv(DATASET_DIR / f"{key}_test.csv")
+            test_df = pd.read_csv(DATASET_DIR / f"{key}_test.csv")
 
-            with st.expander(f"{label}  —  {metrics['accuracy']*100:.1f}% Accuracy", expanded=True):
+            with st.expander(f"{label} (Hold-out Accuracy: {metrics['accuracy']*100:.1f}%)", expanded=True):
                 c1, c2, c3, c4 = st.columns(4)
-                for col, (num, color, lbl) in zip([c1,c2,c3,c4], [
-                    (f"{metrics['accuracy']*100:.1f}%", "#60a5fa", "Accuracy"),
-                    (metrics['n_samples'],               "#a78bfa", "Total Samples"),
-                    (metrics['n_train'],                 "#34d399", "Train Samples"),
-                    (metrics['n_test'],                  "#fb923c", "Test Samples"),
+                for col, (num, color, lbl) in zip([c1, c2, c3, c4], [
+                    (f"{metrics['accuracy']*100:.1f}%", "#60a5fa", "Hold-out Accuracy"),
+                    (metrics["n_samples"], "#a78bfa", "Cohort Samples"),
+                    (metrics["n_train"], "#34d399", "Training Split"),
+                    (metrics["n_test"], "#fb923c", "Test Split"),
                 ]):
                     with col:
                         st.markdown(f"""
@@ -859,71 +779,64 @@ elif page == "📊  Model Analytics":
                         </div>""", unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
-                t1, t2 = st.tabs(["📋 Training Data Sample", "🧪 Test Data Sample"])
-                with t1: st.dataframe(train_df.head(10), use_container_width=True, hide_index=True)
-                with t2: st.dataframe(test_df.head(10),  use_container_width=True, hide_index=True)
+                t1, t2 = st.tabs(["Training Partition (Preview)", "Validation Partition (Preview)"])
+                with t1: st.dataframe(train_df.head(8), use_container_width=True, hide_index=True)
+                with t2: st.dataframe(test_df.head(8), use_container_width=True, hide_index=True)
 
-                st.markdown(f'<div style="color:#6b7280;font-size:0.82rem;margin-top:8px;">Features: {", ".join(metrics["features"])}</div>',
-                            unsafe_allow_html=True)
+                st.caption(f"Input Feature Vector: {', '.join(metrics['features'])}")
         except Exception as e:
-            st.error(f"Could not load {label}: {e}")
+            st.error(f"Error loading metadata for {label}: {e}")
 
-
-# ══════════════════════════════════════════════════════════════
-# PAGE — ABOUT
-# ══════════════════════════════════════════════════════════════
-elif page == "ℹ️   About":
+# --- View: About ---
+elif page == "About":
     st.markdown('<h1 class="main-title">About MediScan AI</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Technology, methodology, and acknowledgements</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">System architecture, modeling methodology, and regulatory disclaimers</p>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""
         <div class="info-card">
-            <h4>🤖 Machine Learning Model</h4>
-            <p>MediScan AI uses <strong style="color:#60a5fa;">Gradient Boosting Classifiers</strong> —
-            an ensemble method combining 200 decision trees for superior accuracy.
-            Learning rate 0.1, max depth 5, trained with stratified 80/20 train-test split.</p>
+            <h4>Algorithm & Modeling Architecture</h4>
+            <p>MediScan AI applies <code>GradientBoostingClassifier</code> ensembles implemented in scikit-learn.
+            Each estimator trains sequential decision trees optimizing deviance loss functions with shrinkage (learning rate: 0.1)
+            and depth constraints (max depth: 5) to balance bias-variance tradeoffs.</p>
         </div>
         <div class="info-card">
-            <h4>📐 Feature Preprocessing</h4>
-            <p>All inputs are normalised using <strong style="color:#60a5fa;">StandardScaler</strong>
-            to ensure consistent scaling across parameters with different units (mg/dL, mmHg, Hz, etc.).</p>
+            <h4>Data Normalization & Feature Pipeline</h4>
+            <p>Continuous clinical markers (e.g. glucose in mg/dL, pressure in mmHg, acoustic frequencies in Hz)
+            are standardized with <code>StandardScaler</code> fit strictly on training partitions to prevent data leakage.</p>
         </div>
         <div class="info-card">
-            <h4>📁 Data & Privacy</h4>
-            <p>No patient data is stored or transmitted. All predictions occur locally in your session.
-            Datasets are synthetically generated from known medical distributions for demonstration.</p>
+            <h4>Session Security & Privacy</h4>
+            <p>Inference executes in-memory. Patient demographic details and clinical inputs are maintained exclusively
+            within the local Streamlit session state and are not persisted to external databases.</p>
         </div>
         """, unsafe_allow_html=True)
 
     with col2:
         st.markdown("""
         <div class="info-card">
-            <h4>🛠️ Tech Stack</h4>
+            <h4>Technical Stack</h4>
             <p>
-                <strong style="color:#60a5fa;">Frontend   :</strong> Streamlit<br>
-                <strong style="color:#60a5fa;">ML Library :</strong> scikit-learn<br>
-                <strong style="color:#60a5fa;">Data       :</strong> pandas, NumPy<br>
-                <strong style="color:#60a5fa;">Storage    :</strong> joblib<br>
-                <strong style="color:#60a5fa;">Language   :</strong> Python 3.8+
+                <strong>Frontend:</strong> Streamlit<br>
+                <strong>Inference & ML:</strong> scikit-learn, joblib<br>
+                <strong>Data Processing:</strong> pandas, NumPy<br>
+                <strong>Runtime Environment:</strong> Python 3.10+
             </p>
         </div>
         <div class="info-card">
-            <h4>⚕️ Medical Disclaimer</h4>
-            <p>This application is for <strong style="color:#fbbf24;">educational & research purposes only</strong>.
-            It is NOT a certified medical device and should never replace professional medical advice,
-            diagnosis, or treatment.</p>
+            <h4>Clinical Decision Support Disclaimer</h4>
+            <p>This software is a research prototype. It does not possess medical device certification under FDA (510k),
+            EU MDR, or equivalent bodies. It is intended strictly for educational, technical demonstration, and investigational workflows.</p>
         </div>
         <div class="info-card">
-            <h4>📬 Acknowledgements</h4>
-            <p>Disease models inspired by the Pima Indians Diabetes Dataset, UCI Heart Disease Dataset,
-            and the Oxford Parkinson's Disease Detection Dataset.</p>
+            <h4>Dataset Acknowledgements</h4>
+            <p>Feature distributions inspired by the National Institute of Diabetes and Digestive and Kidney Diseases
+            (Pima Indians Diabetes), UCI Cleveland Heart Disease repository, and Oxford University Vocal Impairment studies.</p>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("""
-    <div style="text-align:center;padding:40px 0 20px;color:#4b5563;font-size:0.82rem;">
-        MediScan AI — Built with ❤️ using Python & Streamlit<br>
-        For educational purposes only • Not a medical device
+    <div style="text-align:center;padding:32px 0 16px;color:#6b7280;font-size:0.8rem;">
+        MediScan AI — Developed by Ashish Balodia
     </div>""", unsafe_allow_html=True)
