@@ -9,6 +9,10 @@ A clinical decision-support web application providing multi-pathology predictive
 
 🔗 **Live Deployment:** [https://mediscanashish.streamlit.app/](https://mediscanashish.streamlit.app/)
 
+> 💡 **Engineering & Provenance Note (HIPAA & Benchmark Context):**  
+> In healthcare AI development, using raw patient records introduces strict **Protected Health Information (PHI)** and HIPAA compliance restrictions, preventing open public deployment. The core architectural objective of MediScan AI was to build, validate, and deploy a production-grade **end-to-end clinical decision-support pipeline** (isolated preprocessing, multi-pathology inference, dynamic specialist referral mapping, and emergency clinical triage).  
+> To achieve this without PHI compliance issues, mathematical synthetic cohorts modeled strictly on published UCI/Oxford empirical distributions were utilized. Because synthetic distributions feature clean separability, tree-based models achieve **98–100% metrics**. By contrast, on noisy real-world clinical cohorts, established academic benchmarks typically achieve **~76–80% on Pima Diabetes**, **~82–88% on Cleveland Heart**, and **~85–92% on Oxford Parkinson's**.
+
 ---
 
 ## Table of Contents
@@ -99,6 +103,13 @@ Parkinson's Test Partition (N=180)
 Actual Negative           43 (TN)               0 (FP)
 Actual Positive            0 (FN)             137 (TP)
 ```
+
+### 4. Probability Calibration & Brier Metric Analysis
+
+In clinical machine learning, raw classifier outputs (`predict_proba`) from tree-based ensembles represent leaf vote aggregations rather than formally calibrated Bayesian posterior probabilities.
+- **Reporting Fidelity**: To maintain strict technical transparency without making ungrounded claims, outputs are presented as **Decision Confidence Scores** rather than true calibrated probabilities.
+- **Calibration Verification**: We measure probabilistic alignment using the **Brier Score Loss** (mean squared error between confidence values and true binary outcomes: `0.0189` for Diabetes, `0.0000` for Cardiovascular and Parkinson's).
+- **Clinical Calibration Roadmap**: In clinical deployments requiring true population posteriors, a dedicated post-hoc calibration wrapper such as `CalibratedClassifierCV(method='sigmoid')` (Platt Scaling) or Isotonic Regression can be trained on a distinct calibration hold-out split.
 
 ---
 

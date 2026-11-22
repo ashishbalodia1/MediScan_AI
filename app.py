@@ -822,9 +822,10 @@ elif page == "About":
         st.markdown("""
         <div class="info-card">
             <h4>Algorithm & Modeling Architecture</h4>
-            <p>MediScan AI applies <code>GradientBoostingClassifier</code> ensembles implemented in scikit-learn.
-            Each estimator trains sequential decision trees optimizing deviance loss functions with shrinkage (learning rate: 0.1)
-            and depth constraints (max depth: 5) to balance bias-variance tradeoffs.</p>
+            <p>MediScan AI applies <code>GradientBoostingClassifier</code> ensembles. To engineer an end-to-end clinical
+            decision-support pipeline without exposing HIPAA-restricted Protected Health Information (PHI), cohorts were
+            mathematically parameterized on UCI/Oxford distributions. Decision outputs represent model confidence scores
+            rather than true population posteriors, with Brier score calibration loss evaluated.</p>
         </div>
         <div class="info-card">
             <h4>Data Normalization & Feature Pipeline</h4>
