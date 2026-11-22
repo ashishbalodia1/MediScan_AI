@@ -1,6 +1,10 @@
 # MediScan AI
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://mediscanashish.streamlit.app/)
+
 A clinical decision-support web application that evaluates predictive risk scores for **Type 2 Diabetes**, **Cardiovascular Disease**, and **Parkinson's Disease** (vocal dysphonia) using calibrated Gradient Boosting models and normalized biomarker pipelines.
+
+🔗 **Live Deployment:** [https://mediscanashish.streamlit.app/](https://mediscanashish.streamlit.app/)
 
 Built with Python, scikit-learn, and Streamlit.
 
@@ -93,14 +97,12 @@ The application will be accessible at `http://localhost:8501`.
 
 ---
 
-## Streamlit Cloud Deployment
+## Live Deployment
 
-To deploy this project to Streamlit Community Cloud:
+The application is deployed and hosted on Streamlit Community Cloud:  
+👉 **Live Demo:** [https://mediscanashish.streamlit.app/](https://mediscanashish.streamlit.app/)
 
-1. Push your repository to GitHub.
-2. Sign in at [share.streamlit.io](https://share.streamlit.io).
-3. Click **"New app"**, select `ashishbalodia1/MediScan_AI`, set branch to `main`, and main file path to `app.py`.
-4. Deploy. The `.streamlit/config.toml` file will automatically configure headless server settings and styling.
+The `.streamlit/config.toml` file automatically handles server headless configurations and dark clinical UI theming.
 
 ---
 
